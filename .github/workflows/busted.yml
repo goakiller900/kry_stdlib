@@ -1,24 +1,91 @@
-name: busted
+name: Busted tests
 
-on: [push]
+on:
+  push:
+    branches:
+      - master
+      - fix/busted-workflow
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: read
 
 jobs:
   test:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@master
+      - name: Check out repository
+        uses: actions/checkout@v4
 
-    - uses: leafo/gh-actions-lua@v5
-      with:
-        luaVersion: "5.2"
+      - name: Install Lua 5.2 and LuaRocks
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install --yes --quiet \
+            lua5.2 liblua5.2-dev luarocks >/tmp/apt-install.log 2>&1 || {
+              cat /tmp/apt-install.log
+              exit 1
+            }
 
-    - uses: leafo/gh-actions-luarocks@v2
+      - name: Install test dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo luarocks --lua-version=5.2 install busted >/tmp/busted-install.log 2>&1 || {
+            cat /tmp/busted-install.log
+            exit 1
+          }
+          sudo luarocks --lua-version=5.2 install serpent >/tmp/serpent-install.log 2>&1 || {
+            cat /tmp/serpent-install.log
+            exit 1
+          }
 
-    - name: setup
-      run: |
-        luarocks install busted
+      - name: Restore stdlib Factorio mock harness
+        shell: bash
+        run: |
+          set -euo pipefail
+          git remote add stdlib-upstream https://github.com/Afforess/Factorio-Stdlib.git
+          git fetch --no-tags --depth=2 stdlib-upstream \
+            52967ec14de085c13eac0abc08a78db915057ff7
+          git checkout FETCH_HEAD^ -- faketorio
 
-    - name: busted
-      run: |
-        busted -o utfTerminal
+          find faketorio -type f -print | sort >harness-files.txt
+          cat harness-files.txt
+
+          grep -rl --fixed-strings '__stdlib__' faketorio \
+            | xargs -r sed -i 's/__stdlib__/__stdlib2-continued__/g'
+
+          sudo ln -sfn "${GITHUB_WORKSPACE}" \
+            /usr/local/share/lua/5.2/__stdlib2-continued__
+
+      - name: Run Busted test suite
+        id: busted
+        shell: bash
+        run: |
+          set -uo pipefail
+          eval "$(luarocks --lua-version=5.2 path)"
+          set +e
+          busted -o utfTerminal >busted.log 2>&1
+          status=$?
+          set -e
+          echo "status=${status}" >>"${GITHUB_OUTPUT}"
+          tail -n 120 busted.log
+
+      - name: Upload Busted diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: busted-diagnostics
+          path: |
+            busted.log
+            harness-files.txt
+          if-no-files-found: warn
+
+      - name: Fail when tests fail
+        if: steps.busted.outputs.status != '0'
+        shell: bash
+        run: exit 1
