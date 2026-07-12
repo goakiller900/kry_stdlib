@@ -49,27 +49,12 @@ jobs:
         run: |
           set -euo pipefail
           git remote add stdlib-upstream https://github.com/Afforess/Factorio-Stdlib.git
-          git fetch --no-tags stdlib-upstream \
-            master:refs/remotes/stdlib-upstream/master
+          git fetch --no-tags --depth=2 stdlib-upstream \
+            52967ec14de085c13eac0abc08a78db915057ff7
+          git checkout FETCH_HEAD^ -- faketorio
 
-          harness_commit=""
-          while read -r commit; do
-            if git cat-file -e "${commit}:faketorio/searchers.lua" 2>/dev/null \
-              && git cat-file -e "${commit}:faketorio/globals.lua" 2>/dev/null; then
-              harness_commit="${commit}"
-              break
-            fi
-          done < <(git rev-list stdlib-upstream/master -- faketorio/searchers.lua)
-
-          if [[ -z "${harness_commit}" ]]; then
-            echo "Could not locate a complete historical stdlib Faketorio harness."
-            exit 1
-          fi
-
-          echo "Restoring Faketorio harness from ${harness_commit}"
-          git checkout "${harness_commit}" -- faketorio
-          test -f faketorio/searchers.lua
-          test -f faketorio/globals.lua
+          find faketorio -type f -print | sort >harness-files.txt
+          cat harness-files.txt
 
           grep -rl --fixed-strings '__stdlib__' faketorio \
             | xargs -r sed -i 's/__stdlib__/__stdlib2-continued__/g'
@@ -90,13 +75,15 @@ jobs:
           echo "status=${status}" >>"${GITHUB_OUTPUT}"
           tail -n 120 busted.log
 
-      - name: Upload Busted log
+      - name: Upload Busted diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: busted-log
-          path: busted.log
-          if-no-files-found: error
+          name: busted-diagnostics
+          path: |
+            busted.log
+            harness-files.txt
+          if-no-files-found: warn
 
       - name: Fail when tests fail
         if: steps.busted.outputs.status != '0'
