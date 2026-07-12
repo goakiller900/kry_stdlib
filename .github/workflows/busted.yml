@@ -50,7 +50,7 @@ jobs:
           set -euo pipefail
           git remote add stdlib-upstream https://github.com/Afforess/Factorio-Stdlib.git
           git fetch --no-tags --depth=2 stdlib-upstream \
-            52967ec14de085c13eac0abc08a78db915057ff7
+            93a5e69e9813e8b853cb38e4479b2366a0cba3d3
           git checkout FETCH_HEAD^ -- faketorio
 
           grep -rl --fixed-strings '__stdlib__' faketorio \
