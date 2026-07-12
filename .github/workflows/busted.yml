@@ -45,8 +45,27 @@ jobs:
           }
 
       - name: Run Busted test suite
+        id: busted
         shell: bash
         run: |
-          set -euo pipefail
+          set -uo pipefail
           eval "$(luarocks --lua-version=5.2 path)"
-          busted -o utfTerminal
+          set +e
+          busted -o utfTerminal >busted.log 2>&1
+          status=$?
+          set -e
+          echo "status=${status}" >>"${GITHUB_OUTPUT}"
+          tail -n 120 busted.log
+
+      - name: Upload Busted log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: busted-log
+          path: busted.log
+          if-no-files-found: error
+
+      - name: Fail when tests fail
+        if: steps.busted.outputs.status != '0'
+        shell: bash
+        run: exit 1
