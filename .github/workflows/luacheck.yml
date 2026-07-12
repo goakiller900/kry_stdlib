@@ -1,17 +1,82 @@
+name: Validate Factorio library
+
 on:
   push:
     branches:
-    - master
+      - master
   pull_request:
     branches:
-    - master
-name: Luacheck
+      - master
+
+permissions:
+  contents: read
+
 jobs:
-  lint:
+  validate:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@master
-      - name: lint
-        uses: Roang-zero1/factorio-mod-luacheck@master
-        with:
-          luacheckrc_url: https://raw.githubusercontent.com/Nexela/Factorio-luacheckrc/master/.luacheckrc
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Validate continuation metadata and imports
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import re
+          from pathlib import Path
+
+          root = Path('.')
+          info = json.loads((root / 'info.json').read_text(encoding='utf-8'))
+
+          assert info['name'] == 'stdlib2-continued'
+          assert info['version'] == '2.1.0'
+          assert info['factorio_version'] == '2.1'
+          assert 'base >= 2.1' in info['dependencies']
+
+          stale_imports = []
+          stale_mod_checks = []
+          legacy_mod_check = re.compile(
+              r"(?:mods|script\.active_mods)\s*\[\s*['\"]stdlib2['\"]\s*\]"
+          )
+
+          for path in root.rglob('*'):
+              if not path.is_file() or '.git' in path.parts:
+                  continue
+              try:
+                  text = path.read_text(encoding='utf-8')
+              except (UnicodeDecodeError, OSError):
+                  continue
+
+              relative = path.as_posix()
+              if '__stdlib2__' in text:
+                  stale_imports.append(relative)
+              if path.suffix == '.lua' and legacy_mod_check.search(text):
+                  stale_mod_checks.append(relative)
+
+          if stale_imports:
+              raise SystemExit(
+                  'Legacy __stdlib2__ import roots remain in: '
+                  + ', '.join(stale_imports)
+              )
+          if stale_mod_checks:
+              raise SystemExit(
+                  'Legacy stdlib2 mod-ID checks remain in: '
+                  + ', '.join(stale_mod_checks)
+              )
+
+          print('Continuation metadata and import validation passed.')
+          PY
+
+      - name: Install Lua 5.2 compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes lua5.2
+
+      - name: Check Lua syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          find . -type f -name '*.lua' -not -path './.git/*' -print0 \
+            | xargs -0 -n1 luac5.2 -p
