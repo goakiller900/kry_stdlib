@@ -1,9 +1,9 @@
 name: Apply Factorio 2.1 continuation port
 
 on:
-  push:
+  pull_request:
     branches:
-      - agent/factorio-2.1-continued
+      - master
 
 permissions:
   contents: write
@@ -17,7 +17,7 @@ jobs:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     env:
-      TARGET_BRANCH: ${{ github.ref_name }}
+      TARGET_BRANCH: ${{ github.head_ref }}
       GH_TOKEN: ${{ github.token }}
 
     steps:
