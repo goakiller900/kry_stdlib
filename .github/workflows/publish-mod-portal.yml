@@ -109,7 +109,7 @@ jobs:
           MOD_VERSION: ${{ steps.meta.outputs.version }}
           ARCHIVE: ${{ steps.meta.outputs.archive }}
           MOD_CATEGORY: internal
-          MOD_SOURCE_URL: https://github.com/goakiller900/stdlib2
+          MOD_SOURCE_URL: https://github.com/kryzeth/kry_stdlib
         run: |
           set -euo pipefail
 
