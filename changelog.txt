@@ -3,12 +3,6 @@ Version: 2.2.5
 Date: July 13, 2026
   Info:
     - Folded in several minor bugfixes from goakiller900's stdlib2 continuation project
-  Bugfixes:
-    - Migrated script-output helpers from removed game methods to the Factorio 2.1 helpers API.
-    - Updated diagnostic storage dumps from the removed global table to storage.
-    - Updated statistics exports to use the Factorio 2.1 per-surface statistics methods.
-    - Updated LuaObject detection for userdata-based Factorio objects.
-    - Made recipe copying tolerate recipes without a results table.
 ---------------------------------------------------------------------------------------------------
 Version: 2.2.4
 Date: July 11, 2026
