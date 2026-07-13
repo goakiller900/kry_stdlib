@@ -4,18 +4,18 @@
 -- <p>This modules can register the following events:
 -- @module Event.Surface
 -- @usage
--- local surface = require('__stdlib2__/stdlib/event/surface').register_events()
+-- local surface = require('__stdlib2-continued__/stdlib/event/surface').register_events()
 
-local Event = require('__stdlib2__/stdlib/event/event')
+local Event = require('__stdlib2-continued__/stdlib/event/event')
 
 local Surface = {
     __class = 'Surface',
     _new_surface_data = {}
 }
-setmetatable(Surface, require('__stdlib2__/stdlib/core'))
+setmetatable(Surface, require('__stdlib2-continued__/stdlib/core'))
 local inspect = _ENV.inspect
 
-local merge_additional_data = require('__stdlib2__/stdlib/event/modules/merge_data')
+local merge_additional_data = require('__stdlib2-continued__/stdlib/event/modules/merge_data')
 
 local function new(index)
     local surface = game.surfaces[index]
@@ -81,8 +81,8 @@ function Surface.init(event, overwrite)
 end
 
 function Surface.dump_data()
-    game.write_file(Surface.get_file_path('Surface/surface_data.lua'), inspect(Surface._new_surface_data, { longkeys = true, arraykeys = true }))
-    game.write_file(Surface.get_file_path('Surface/global.lua'), inspect(storage.surfaces or nil, { longkeys = true, arraykeys = true }))
+    helpers.write_file(Surface.get_file_path('Surface/surface_data.lua'), inspect(Surface._new_surface_data, { longkeys = true, arraykeys = true }))
+    helpers.write_file(Surface.get_file_path('Surface/global.lua'), inspect(storage.surfaces or nil, { longkeys = true, arraykeys = true }))
 end
 
 function Surface.register_init()

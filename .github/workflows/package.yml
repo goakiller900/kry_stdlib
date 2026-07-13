@@ -1,0 +1,277 @@
+name: Build and release Factorio mod
+
+on:
+  pull_request:
+  push:
+    branches:
+      - "**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: factorio-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    name: Package mod
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Install packaging tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install --yes --quiet \
+            jq rsync zip unzip
+
+      - name: Read and validate mod metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          name="$(jq -er '.name' info.json)"
+          version="$(jq -er '.version' info.json)"
+          title="$(jq -er '.title // .name' info.json)"
+          package="${name}_${version}"
+          archive="${package}.zip"
+          checksum="${archive}.sha256"
+          tag="v${version}"
+
+          ref_name="${GITHUB_REF_NAME}"
+          branch_slug="$(printf '%s' "${ref_name}" | sed -E 's/[^A-Za-z0-9._-]+/-/g; s/^-+//; s/-+$//' | cut -c1-80)"
+          branch_slug="${branch_slug:-branch}"
+          short_sha="${GITHUB_SHA:0:7}"
+
+          if [[ ! "${name}" =~ ^[A-Za-z0-9_-]+$ ]]; then
+            echo "::error::Invalid Factorio mod name in info.json: ${name}"
+            exit 1
+          fi
+
+          if [[ ! "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Invalid Factorio mod version in info.json: ${version}"
+            exit 1
+          fi
+
+          {
+            echo "name=${name}"
+            echo "version=${version}"
+            echo "title=${title}"
+            echo "package=${package}"
+            echo "archive=${archive}"
+            echo "checksum=${checksum}"
+            echo "tag=${tag}"
+            echo "branch_name=${ref_name}"
+            echo "branch_slug=${branch_slug}"
+            echo "branch_tag=branch-${branch_slug}"
+            echo "short_sha=${short_sha}"
+          } >> "${GITHUB_OUTPUT}"
+
+          echo "Package folder: ${package}/"
+          echo "Archive name:  ${archive}"
+          echo "Stable tag:   ${tag}"
+
+      - name: Build Factorio-compatible ZIP
+        shell: bash
+        env:
+          PACKAGE: ${{ steps.meta.outputs.package }}
+          ARCHIVE: ${{ steps.meta.outputs.archive }}
+          CHECKSUM: ${{ steps.meta.outputs.checksum }}
+        run: |
+          set -euo pipefail
+
+          rm -rf dist
+          mkdir -p "dist/${PACKAGE}"
+
+          excludes=(
+            --exclude='.git/'
+            --exclude='.github/'
+            --exclude='.circleci/'
+            --exclude='.build/'
+            --exclude='.bin/'
+            --exclude='.output/'
+            --exclude='.temp/'
+            --exclude='.trash/'
+            --exclude='.history/'
+            --exclude='.vscode/'
+            --exclude='.idea/'
+            --exclude='dist/'
+            --exclude='*.zip'
+            --exclude='busted.log'
+            --exclude='harness-files.txt'
+            --exclude='.gitignore'
+            --exclude='.gitattributes'
+            --exclude='.luacheckrc'
+          )
+
+          while IFS= read -r pattern; do
+            [[ -n "${pattern}" ]] && excludes+=(--exclude="${pattern}")
+          done < <(jq -r '.package.ignore[]?' info.json)
+
+          rsync -a --prune-empty-dirs "${excludes[@]}" ./ "dist/${PACKAGE}/"
+
+          test -f "dist/${PACKAGE}/info.json"
+          test -d "dist/${PACKAGE}/stdlib"
+
+          (
+            cd dist
+            zip -rq "${ARCHIVE}" "${PACKAGE}"
+            sha256sum "${ARCHIVE}" > "${CHECKSUM}"
+          )
+
+      - name: Verify archive structure and metadata
+        shell: bash
+        env:
+          MOD_NAME: ${{ steps.meta.outputs.name }}
+          MOD_VERSION: ${{ steps.meta.outputs.version }}
+          PACKAGE: ${{ steps.meta.outputs.package }}
+          ARCHIVE: ${{ steps.meta.outputs.archive }}
+        run: |
+          set -euo pipefail
+
+          archive_path="dist/${ARCHIVE}"
+
+          mapfile -t roots < <(
+            unzip -Z1 "${archive_path}" \
+              | sed '/^$/d' \
+              | cut -d/ -f1 \
+              | sort -u
+          )
+
+          if [[ "${#roots[@]}" -ne 1 || "${roots[0]}" != "${PACKAGE}" ]]; then
+            echo "::error::Archive must contain exactly one top-level folder named ${PACKAGE}."
+            printf 'Detected roots: %s\n' "${roots[@]:-none}"
+            exit 1
+          fi
+
+          embedded_name="$(unzip -p "${archive_path}" "${PACKAGE}/info.json" | jq -er '.name')"
+          embedded_version="$(unzip -p "${archive_path}" "${PACKAGE}/info.json" | jq -er '.version')"
+
+          if [[ "${embedded_name}" != "${MOD_NAME}" || "${embedded_version}" != "${MOD_VERSION}" ]]; then
+            echo "::error::Packaged info.json does not match the expected mod name and version."
+            exit 1
+          fi
+
+          offending_paths="$(
+            unzip -Z1 "${archive_path}" \
+              | grep -E "^${PACKAGE}/(\.git|\.github|spec|tools|doc|wiki|faketorio)(/|$)" \
+              || true
+          )"
+
+          if [[ -n "${offending_paths}" ]]; then
+            echo "::error::Development-only files were included in the mod archive."
+            printf '%s\n' "${offending_paths}"
+            exit 1
+          fi
+
+          echo "Verified ${ARCHIVE}"
+          unzip -l "${archive_path}" | tail -n 5
+
+      - name: Create or update branch prerelease
+        if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref != 'refs/heads/master' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MOD_TITLE: ${{ steps.meta.outputs.title }}
+          VERSION: ${{ steps.meta.outputs.version }}
+          BRANCH_NAME: ${{ steps.meta.outputs.branch_name }}
+          BRANCH_TAG: ${{ steps.meta.outputs.branch_tag }}
+          SHORT_SHA: ${{ steps.meta.outputs.short_sha }}
+          ARCHIVE: dist/${{ steps.meta.outputs.archive }}
+          CHECKSUM: dist/${{ steps.meta.outputs.checksum }}
+        run: |
+          set -euo pipefail
+
+          if gh release view "${BRANCH_TAG}" >/dev/null 2>&1; then
+            gh release delete "${BRANCH_TAG}" --yes --cleanup-tag
+          elif git ls-remote --exit-code --tags origin "refs/tags/${BRANCH_TAG}" >/dev/null 2>&1; then
+            git push origin ":refs/tags/${BRANCH_TAG}"
+          fi
+
+          gh release create "${BRANCH_TAG}" "${ARCHIVE}" "${CHECKSUM}" \
+            --target "${GITHUB_SHA}" \
+            --prerelease \
+            --title "${MOD_TITLE} ${VERSION} — ${BRANCH_NAME} (${SHORT_SHA})" \
+            --notes "Automatic test build from branch \`${BRANCH_NAME}\` at commit \`${GITHUB_SHA}\`. This is not a stable release."
+
+      - name: Create or prepare immutable GitHub release
+        if: ${{ github.ref == 'refs/heads/master' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MOD_TITLE: ${{ steps.meta.outputs.title }}
+          VERSION: ${{ steps.meta.outputs.version }}
+          TAG: ${{ steps.meta.outputs.tag }}
+          ARCHIVE: dist/${{ steps.meta.outputs.archive }}
+          CHECKSUM: dist/${{ steps.meta.outputs.checksum }}
+        run: |
+          set -euo pipefail
+
+          git fetch --tags --force
+
+          if git rev-parse --verify --quiet "refs/tags/${TAG}" >/dev/null; then
+            tag_sha="$(git rev-list -n 1 "${TAG}")"
+
+            if gh release view "${TAG}" >/dev/null 2>&1; then
+              rm -rf /tmp/existing-release
+              mkdir -p /tmp/existing-release
+
+              if ! gh release download "${TAG}" \
+                --pattern "$(basename "${ARCHIVE}")" \
+                --dir /tmp/existing-release; then
+                echo "::error::The existing ${TAG} release does not contain $(basename "${ARCHIVE}")."
+                exit 1
+              fi
+
+              existing_archive="/tmp/existing-release/$(basename "${ARCHIVE}")"
+              built_digest="$(sha256sum "${ARCHIVE}" | awk '{print $1}')"
+              existing_digest="$(sha256sum "${existing_archive}" | awk '{print $1}')"
+
+              if [[ "${built_digest}" != "${existing_digest}" ]]; then
+                echo "::warning::The repository differs from the immutable ${TAG} release. Increase info.json version before releasing changed mod contents."
+              else
+                echo "Existing ${TAG} release contains the identical mod archive."
+              fi
+
+              cp "${existing_archive}" "${ARCHIVE}"
+              printf '%s  %s\n' "${existing_digest}" "$(basename "${ARCHIVE}")" > "${CHECKSUM}"
+            elif [[ "${tag_sha}" == "${GITHUB_SHA}" ]]; then
+              gh release create "${TAG}" "${ARCHIVE}" "${CHECKSUM}" \
+                --verify-tag \
+                --title "${MOD_TITLE} ${VERSION}" \
+                --generate-notes
+            else
+              echo "::error::${TAG} points to ${tag_sha}, not ${GITHUB_SHA}, and has no GitHub Release. Increase the version or repair the tag manually."
+              exit 1
+            fi
+          else
+            gh release create "${TAG}" "${ARCHIVE}" "${CHECKSUM}" \
+              --target "${GITHUB_SHA}" \
+              --title "${MOD_TITLE} ${VERSION}" \
+              --generate-notes
+          fi
+
+      - name: Upload mod ZIP
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.meta.outputs.archive }}
+          path: dist/${{ steps.meta.outputs.archive }}
+          archive: false
+          if-no-files-found: error
+
+      - name: Upload SHA-256 checksum
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.meta.outputs.checksum }}
+          path: dist/${{ steps.meta.outputs.checksum }}
+          archive: false
+          if-no-files-found: error
