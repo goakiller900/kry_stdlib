@@ -56,10 +56,10 @@ jobs:
           cat harness-files.txt
 
           grep -rl --fixed-strings '__stdlib__' faketorio \
-            | xargs -r sed -i 's/__stdlib__/__stdlib2-continued__/g'
+            | xargs -r sed -i 's/__stdlib__/__kry_stdlib__/g'
 
           sudo ln -sfn "${GITHUB_WORKSPACE}" \
-            /usr/local/share/lua/5.2/__stdlib2-continued__
+            /usr/local/share/lua/5.2/__kry_stdlib__
 
       - name: Run Busted test suite
         id: busted
