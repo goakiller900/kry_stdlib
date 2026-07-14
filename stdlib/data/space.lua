@@ -3,7 +3,7 @@ local Data = require('__kry_stdlib__/stdlib/data/data')
 local Table = require('__kry_stdlib__/stdlib/utils/table') --[[@as StdLib.Utils.Table]]
 
 --- Space, the final frontier. Intended for planet, space-connection, and space-location
----@class Data.Space : StdLib.Data
+---@class StdLib.Data.Space : StdLib.Data
 local Space = {
     __class = 'Space',
     __index = Data,
@@ -247,7 +247,6 @@ function Space:create_space_connection(destination, length)
 		length = length or 15000,	-- default value for inner planet connections
 		subgroup = "planet-connections",
 		order = self.name.."-"..destination.name,
-		order = self.name.."-"..destination.name,
 	}
 	-- if both planet/space-locations has icon, use them in the connection icons
 	if self.icon and destination.icon then
@@ -276,7 +275,7 @@ function Space:create_space_connection(destination, length)
 		connection.icon_size = 64
 	end
 	connection.asteroid_spawn_definitions =
-		generate_connection_asteroids(self, destination, prob_data)
+		generate_connection_asteroids(self, destination)
 	data:extend({connection})
 	return Space(connection.name, "space-connection")
 end

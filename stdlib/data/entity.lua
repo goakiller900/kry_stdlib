@@ -5,7 +5,9 @@ local Item = require('__kry_stdlib__/stdlib/data/item')
 --- Entity class
 ---@class StdLib.Data.Entity : StdLib.Data
 ---@field minable data.MinableProperties (AssemblingMachinePrototype and many others)
----@field inputs (ItemID)[] (LabPrototype)
+---@field inputs? StdLib.UniqueArray
+---@field collision_mask? data.CollisionMaskConnector
+---@field collision_box? data.BoundingBox
 local Entity = {
     __class = 'Entity',
     __index = Data,
@@ -43,7 +45,7 @@ function Entity:get_minable_item()
     local Item = require('__kry_stdlib__/stdlib/data/item')
     if self:is_valid() then
         local m = self.minable
-        return Item(m and (m.result or (m.results and (m.results[1] or m.results.name))), nil, self.options)
+        return Item(m and (m.result or (m.results and m.results[1] and m.results[1].name)), nil, self.options)
     end
     return Item()
 end
@@ -57,7 +59,7 @@ end
 
 function Entity:is_player_placeable()
     if self:is_valid() then
-        return self:Flags():any('player-creation', 'placeable-player')
+        return self:Flags():any({'player-creation', 'placeable-player'})
     end
     return false
 end
@@ -272,19 +274,22 @@ function Entity:rescale_entity(scale, squeak, shrink_value)
 	end
 end
 
--- returns the height and width in simpler numbers
+--- Returns the rounded-up width and height of the entity's collision box.
+---@return integer? width
+---@return integer? height
 function Entity:get_dimensions()
-	if self:is_valid() and self.collision_box then
-		local box = self.collision_box
-		local x1, y1 = box[1][1], box[1][2]
-		local x2, y2 = box[2][1], box[2][2]
+    if not self:is_valid() or not self.collision_box then return end
+    local box = self.collision_box
+	---@cast box table<any, any>
+    local left_top = box.left_top or box[1]
+    local right_bottom = box.right_bottom or box[2]
 
-		-- width/height are just (max - min), rounded up to nearest int
-		local width  = math.ceil(x2 - x1)
-		local height = math.ceil(y2 - y1)
-		
-		return width, height
-	end
+    local x1 = left_top.x or left_top[1]
+    local y1 = left_top.y or left_top[2]
+    local x2 = right_bottom.x or right_bottom[1]
+    local y2 = right_bottom.y or right_bottom[2]
+
+    return math.ceil(x2 - x1), math.ceil(y2 - y1)
 end
 
 return Entity

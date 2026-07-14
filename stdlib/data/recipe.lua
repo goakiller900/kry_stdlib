@@ -1,5 +1,5 @@
-local Data = require('__kry_stdlib__/stdlib/data/data') --[[@as StdLib.Data]]
-local Table = require('__kry_stdlib__/stdlib/utils/table') --[[@as StdLib.Utils.Table]]
+local Data = require('__kry_stdlib__/stdlib/data/data')
+local Table = require('__kry_stdlib__/stdlib/utils/table')
 
 --- Recipe class
 ---@class StdLib.Data.Recipe : StdLib.Data
@@ -170,8 +170,8 @@ function Recipe:copy_ingredients(recipe, keep_ingredients)
 end
 Recipe.copy_ing = Recipe.copy_ingredients
 
---- Shorthand to get ingredient table associated with recipe.
----@return table? Ingredients
+--- Returns a copy of this recipe's ingredients.
+---@return Ingredient[]? ingredients
 function Recipe:get_ingredients()
     if self:is_valid() then
 		return table.deepcopy(self.ingredients)
@@ -179,9 +179,9 @@ function Recipe:get_ingredients()
 end
 Recipe.get_ing = Recipe.get_ingredients
 
---- Gets the ingredient amount for a specified ingredient
----@param string ingredient_name 
----@return number result amount or nil
+--- Gets the amount of a specified ingredient.
+---@param ingredient_name string Name of the ingredient
+---@return number? amount
 function Recipe:get_ingredient_amount(ingredient_name)
     if self:is_valid() then
 		for _, ingredient in pairs(self.ingredients) do
@@ -193,10 +193,10 @@ function Recipe:get_ingredient_amount(ingredient_name)
 end
 Recipe.get_ingredient_count = Recipe.get_ingredient_amount
 
---- Sets the ingredients table for this recipe
----@param string or table ingredient name or array of ingredients
----@param amount number amount to assign ingredient when specified by name
----@param [opt] type string ingredient type (item or fluid)
+--- Sets the ingredients for this recipe.
+---@param ingredients string|Ingredient[] Ingredient name or complete ingredient array
+---@param amount number? Amount when `ingredients` is a name
+---@param ingredient_type "item"|"fluid"? Ingredient type when `ingredients` is a name
 ---@return boolean success
 function Recipe:set_ingredients(ingredients, amount, ingredient_type)
 	if self:is_valid() then
@@ -205,6 +205,7 @@ function Recipe:set_ingredients(ingredients, amount, ingredient_type)
 			return true
 		elseif type(ingredients) == "string" then
 			local ingredient_type = ingredient_type or "item"
+			local amount = amount or 1
 			self.ingredients = {{name = ingredients, amount = amount, type = ingredient_type}}
 			return true
 		end
@@ -233,10 +234,10 @@ function Recipe:set_ingredient_amount(find, amount)
 end
 Recipe.set_ingredient_count = Recipe.set_ingredient_amount
 
---- Multiplies the amount of each ingredient in a recipe.
----@param ingredient string Name of ingredient to be multiplied
----@param mult number Amount to multiply each ingredient by
----@return self
+--- Multiplies the amount of one ingredient.
+---@param find string Name of the ingredient
+---@param mult number Multiplier
+---@return boolean success
 function Recipe:multiply_ingredient(find, mult)
 	if self:is_valid() then
 		for _, ingred in pairs(self.ingredients or {}) do
@@ -318,7 +319,8 @@ function Recipe:remove_unlock(tech_name)
     return self
 end
 
---- Return a list of all technologies that unlock this recipe.
+--- Returns all technologies that unlock this recipe.
+---@return table<string, true>? technologies
 function Recipe:get_technologies()
     if self:is_valid('recipe') then
 		local Tech = require('__kry_stdlib__/stdlib/data/technology')
@@ -335,7 +337,8 @@ function Recipe:get_technologies()
 end
 Recipe.get_tech = Recipe.get_technologies
 
--- Locate all technologies that unlocks copy_recipe, and adds this recipe to those technologies
+--- Copies recipe unlocks from another recipe.
+---@param copy_recipe string Source recipe name
 function Recipe:copy_unlock(copy_recipe)
 	local copy_recipe = Recipe(copy_recipe)
 	if self:is_valid() and copy_recipe:is_valid() then
@@ -416,7 +419,8 @@ function Recipe:add_result(product, count, probability)
 		if type(product)=="string" then
 			local count = count or 1
 			local probability = probability or 1
-			product = {type="item", name=product, amount=count, probability=probability}--[[@as ItemProduct]]
+			---@diagnostic disable-next-line: missing-fields
+			product = {type="item", name=product, amount=count, independent_probability=probability}
 		end
         if self.results then
 			table.insert(self.results, product)
@@ -449,8 +453,10 @@ function Recipe:replace_result(replace, product, count, probability)
 		local p0 = find_result(self.results, replace)
 		if not p0 then return self end
 		local count = (p0.amount and p0.amount > 0) and p0.amount or ((count and count > 1) and count or 1)
-		local probability = (p0.probability and p0.probability > 0) and p0.probability or ((probability and probability > 1) and probability or 1)
-		product = {name=product, amount=count, type="item", probability=probability}
+		local probability = (p0.independent_probability and p0.independent_probability > 0) and p0.independent_probability
+			or ((probability and probability >= 0 and probability <= 1) and probability or 1)
+		---@diagnostic disable-next-line: missing-fields
+		product = {name=product, amount=count, type="item", independent_probability=probability}
 	end
 	if self.results then
 		replace_result(self.results, replace, product)
@@ -486,17 +492,17 @@ function Recipe:copy_results(recipe, keep_results)
     return self
 end
 
---- Shorthand to get results table associated with recipe.
----@return Product[]? #Results
+--- Returns this recipe's results.
+---@return Product[]? results
 function Recipe:get_results()
     if self:is_valid() then
 		return self["results"]
     end
 end
 
---- Gets the result amount for a specified result
----@param string result_name 
----@return number result amount or nil
+--- Gets the amount of a specified result.
+---@param result_name string Name of the result
+---@return number? amount
 function Recipe:get_result_count(result_name)
     if self:is_valid() then
 		for _, result in pairs(self.results) do
@@ -509,10 +515,10 @@ function Recipe:get_result_count(result_name)
 end
 Recipe.get_result_amount = Recipe.get_result_count
 
---- Sets the results table for this recipe
----@param string or table result name or array of results
----@param amount number amount to assign result when specified by name
----@param [opt] type string result type (item or fluid)
+--- Sets the results for this recipe.
+---@param results string|Product[] Result name or complete product array
+---@param amount number? Amount when `results` is a name
+---@param result_type "item"|"fluid"? Result type when `results` is a name
 ---@return boolean success
 function Recipe:set_results(results, amount, result_type)
 	if self:is_valid() then
@@ -521,6 +527,7 @@ function Recipe:set_results(results, amount, result_type)
 			return true
 		elseif type(results) == "string" then
 			local result_type = result_type or "item"
+			---@diagnostic disable-next-line: missing-fields
 			self.results = {{name = results, amount = amount, type = result_type}}
 			return true
 		end
@@ -547,10 +554,10 @@ function Recipe:set_result_amount(find, amount)
 	return false
 end
 
---- Multiplies the amount of each result in a recipe.
----@param result string Name of result to be multiplied
----@param mult number Amount to multiply each result by
----@return self
+--- Multiplies the amount of one result.
+---@param find string Name of the result
+---@param mult number Multiplier
+---@return boolean success
 function Recipe:multiply_result(find, mult)
 	if self:is_valid() then
 		for _, result in pairs(self.results or {}) do
