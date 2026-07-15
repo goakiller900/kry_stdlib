@@ -2,7 +2,7 @@
 Version: 2.2.6
 Date: July 15, 2026
   Bugfixes:
-    - Fixed several runtime compatibility issues and helper function bugs affecting mods using stdlib on Factorio 2.1.
+    - Fixed several runtime compatibility issues with Factorio 2.1.
 ---------------------------------------------------------------------------------------------------
 Version: 2.2.5
 Date: July 14, 2026
@@ -288,7 +288,7 @@ Date: 21.7.2019
   Features:
     - Added Position:random.
     - Added Position:update.
-    - Added Position:to_string_xy.
+    - Added Position.to_string_xy.
     - Added Position:normalized, ceiled, floored, rounded for modifying the position in place.
     - Added Position:is_Position, is_simple_position, is_complex_position.
     - Added Area:update.
@@ -474,7 +474,7 @@ Date: 30.9.2016
     - Added table.any, searches a table and returns true if any elements matches the function
     - Added Trains module, providing train utility methods and events:
     - Added Trains.set_data, sets persistent mod data on a train
-    - Added Trains.get_data, gets mod data on a train
+    - Added Trains.get_data, gets mod data stored on a train
     - Added Trains.on_train_id_changed event, contains the old and new id of the train, and fires when a train id changes (e.g. locomotives are added to an existing train)
     - Added Trains.find_filtered, searches and returns a table of trains on surface(s) for trains that match the area, name, or state criteria
     - Added Trains.get_train_id, returns the train id of a train
@@ -531,7 +531,7 @@ Date: 30.7.2016
     - `Data.select('recipe:steel.*').energy_required = 1 -- sets all recipes whose name matches 'steel.*' to require 1 energy to produce`
     - `Data.select('recipe:steel.*').apply('energy_required', 1) = 1 -- sets all recipes whose name matches 'steel.*' to require 1 energy to produce. Apply returns itself, so apply function calls can be chained.`
     - Recipe.select, when given a selection string, returns a list of all recipe elements in data.raw that matched the selection. The returned list is backed by the real data.raw and changes to it are reflected in the data.raw and therefore the game.
-    - `Recipe.select('steel.*:ingredients') -- returns a table with all ingredients from all recipes whose name matches 'steel.*'`
+    - `Recipe.select('steel.*:ingredients') -- returns a table with all ingredients from all recipes`
     - `Recipe.select('steel.*:ingredients:iron-plate') -- returns a table with all iron-plate ingredient objects, from all recipes whose name matches 'steel.*'`
 
   Changes:
@@ -556,11 +556,11 @@ Date: 12.6.2016
     - Added options to Logger.new, adds option to modify the file extension and alter the timestamp format
     - Added Chunk.get to calculate the chunk coordinates for a given tile position
     - Added Chunk.get_data, retrieves mod data stored on a chunk position
-    - Added Chunk.set_data sets persistent mod data on a chunk position
+    - Added Chunk.set_data sets mod data on a chunk position
     - Added Tile.from_position, calculates tile coordinates from a position
     - Added Tile.to_area, returns the area that a single tile occupies
     - Added Tile.get_data, retrieves mod data stored on a tile position
-    - Added Tile.set_data, sets or removes persistent mod data associated with a tile position
+    - Added Tile.set_data, sets mod data on a tile position
     - Added Area.spiral_iterate, is an alternate iterator (compared to Area.iterate) that iterates the Area in an inside-out spiral fashion
     - Added Area.center, returns the center position of an Area
     - Added string.contains, tests if a string contains a substring
@@ -585,7 +585,7 @@ Date: 9.5.2016
     - Added table.first, returns the first item in the array
     - Added table.last, returns the last item in the array
     - Added table.map, returns a copy of the table transformed by the function
-    - Added table.merge, merges table b into table a, overwriting any duplicate entries in table a with values from table b
+    - Added table.merge, merges table b into table a, overwriting any duplicate entries in table a with values in table b
     - Improved Event Registry
     - Added access to the event handler reference (the function handling the event) in event._handler
     - Added Event.remove, allows events to be de-registered
